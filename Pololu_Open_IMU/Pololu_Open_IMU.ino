@@ -56,7 +56,7 @@ void loop(){
     G_Dt = (micros() - timer)/1000000.0;
     timer=micros();
     if ((loopCount % 8) == 0){
-      if (loopCount == 40){//attempt full update at 10hz
+      if (loopCount == 24){//attempt full update at 10hz
         compass.read();
         gyro.read();
         AHRSupdate(&G_Dt);
