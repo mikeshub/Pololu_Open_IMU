@@ -1,5 +1,3 @@
-#include <Streaming.h>
-
 /*
 Based on the Madgwick algorithm found at:
  http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
@@ -43,6 +41,7 @@ int i;
 void setup(){
   Serial.begin(115200);
   Wire.begin();
+  TWBR = ((F_CPU / 400000) - 16) / 2;//set the I2C speed to 400KHz
   IMUinit();
   printTimer = millis();
   timer = micros();
@@ -56,20 +55,20 @@ void loop(){
     G_Dt = (micros() - timer)/1000000.0;
     timer=micros();
     if ((loopCount % 8) == 0){
-      if (loopCount == 24){//attempt full update at 10hz
+      if (loopCount == 16){
         compass.read();
         gyro.read();
         AHRSupdate(&G_Dt);
         loopCount = 0;
       }
-      else{//attempt pitch and roll calculations at 50hz
+      else{
         gyro.read();
         compass.readAcc();
         IMUupdate(&G_Dt);
         loopCount++;
       }
     }
-    else{//We attempt to integrate the gyro at 400hz
+    else{
       gyro.read();
       GYROupdate(&G_Dt);
       loopCount++;
