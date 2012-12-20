@@ -1,9 +1,10 @@
 /*
 Based on the Madgwick algorithm found at:
- http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+ See: http://www.x-io.co.uk/open-source-imu-and-ahrs-algorithms/
  
  This code inherits all relevant liscenses and may be freely modified and redistributed.
- 
+ The MinIMU v1 has a roughly +/- 10degree accuracy
+ The MinIMU v2 has a roughly +/- 1 degree accuracy
  */
 #include <LSM303.h>
 #include <L3G.h>
@@ -14,7 +15,34 @@ Based on the Madgwick algorithm found at:
 #define PI_FLOAT     3.14159265f
 #define PIBY2_FLOAT  1.5707963f
 #define GYRO_SCALE 0.07f
-#define betaDef		0.1f
+#define betaDef		0.08f
+
+//To find the calibration values us the sketch included with the LSM303 driver from pololu
+/*Change line 11 from
+ 
+ compass.enableDefault();
+ 
+ to 
+ 
+ compass.writeMagReg(LSM303_CRA_REG_M, 0x1C);
+ compass.writeMagReg(LSM303_CRB_REG_M, 0x60);
+ compass.writeMagReg(LSM303_MR_REG_M, 0x00);  
+ 
+ Then put the calibration values below
+ 
+ */
+
+#define compassXMax 216.0f
+#define compassXMin -345.0f
+#define compassYMax 210.0f
+#define compassYMin -347.0f
+#define compassZMax 249.0f
+#define compassZMin -305.0f
+#define inverseXRange (float)(2.0 / (compassXMax - compassXMin))
+#define inverseYRange (float)(2.0 / (compassYMax - compassYMin))
+#define inverseZRange (float)(2.0 / (compassZMax - compassZMin))
+
+
 
 L3G gyro;
 LSM303 compass;
@@ -36,10 +64,15 @@ float pitch,roll,yaw;
 float gyroSumX,gyroSumY,gyroSumZ;
 float offSetX,offSetY,offSetZ;
 
+float floatMagX,floatMagY,floatMagZ;
+float smoothAccX,smoothAccY,smoothAccZ;
+float accToFilterX,accToFilterY,accToFilterZ;
+
 int i;
 
 void setup(){
   Serial.begin(115200);
+  Serial.println("Keeping the device still and level during startup will yeild the best results");
   Wire.begin();
   TWBR = ((F_CPU / 400000) - 16) / 2;//set the I2C speed to 400KHz
   IMUinit();
@@ -51,41 +84,35 @@ void setup(){
 
 void loop(){
 
-  if (micros() - timer >= 2500){
+  if (micros() - timer >= 5000){
+    //this runs in 4ms on the MEGA 2560
     G_Dt = (micros() - timer)/1000000.0;
     timer=micros();
-    if ((loopCount % 8) == 0){
-      if (loopCount == 16){
-        compass.read();
-        gyro.read();
-        AHRSupdate(&G_Dt);
-        loopCount = 0;
-      }
-      else{
-        gyro.read();
-        compass.readAcc();
-        IMUupdate(&G_Dt);
-        loopCount++;
-      }
-    }
-    else{
-      gyro.read();
-      GYROupdate(&G_Dt);
-      loopCount++;
-    } 
+    compass.read();
+    floatMagX = ((float)compass.m.x - compassXMin) * inverseXRange - 1.0;
+    floatMagY = ((float)compass.m.y - compassYMin) * inverseYRange - 1.0;
+    floatMagZ = ((float)compass.m.z - compassZMin) * inverseZRange - 1.0;
+    Smoothing(&compass.a.x,&smoothAccX);
+    Smoothing(&compass.a.y,&smoothAccY);
+    Smoothing(&compass.a.z,&smoothAccZ);
+    accToFilterX = smoothAccX;
+    accToFilterY = smoothAccY;
+    accToFilterZ = smoothAccZ;
+    gyro.read();
+    AHRSupdate(&G_Dt);
   }
 
   if (millis() - printTimer > 50){
-   printTimer = millis();
-   GetEuler();
-   Serial.print(printTimer);
-   Serial.print(",");
-   Serial.print(pitch);
-   Serial.print(",");
-   Serial.print(roll);
-   Serial.print(",");
-   Serial.println(yaw);
-   }
+    printTimer = millis();
+    GetEuler();
+    Serial.print(printTimer);
+    Serial.print(",");
+    Serial.print(pitch);
+    Serial.print(",");
+    Serial.print(roll);
+    Serial.print(",");
+    Serial.println(yaw);
+  }
 
 }
 
@@ -110,9 +137,35 @@ void IMUinit(){
 
   beta = betaDef;
   //calculate initial quaternion
-  gyro.read();
+  //take an average of the gyro readings to remove the bias 
+
+  for (i = 0; i < 500;i++){
+    gyro.read();
+    compass.read();
+    Smoothing(&compass.a.x,&smoothAccX);
+    Smoothing(&compass.a.y,&smoothAccY);
+    Smoothing(&compass.a.z,&smoothAccZ);
+    delay(3);
+  }
+  gyroSumX = 0;
+  gyroSumY = 0;
+  gyroSumZ = 0;
+  for (i = 0; i < 500;i++){
+    gyro.read();
+    compass.read();
+    Smoothing(&compass.a.x,&smoothAccX);
+    Smoothing(&compass.a.y,&smoothAccY);
+    Smoothing(&compass.a.z,&smoothAccZ);
+    gyroSumX += (gyro.g.x);
+    gyroSumY += (gyro.g.y);
+    gyroSumZ += (gyro.g.z);
+    delay(3);
+  }
+  offSetX = gyroSumX / 500.0;
+  offSetY = gyroSumY / 500.0;
+  offSetZ = gyroSumZ / 500.0;
   compass.read();
-  
+
   //calculate the initial quaternion 
   //these are rough values. This calibration works a lot better if the device is kept as flat as possible
   //find the initial pitch and roll
@@ -134,24 +187,29 @@ void IMUinit(){
       roll = 180.0 - roll;
     }
   }  
-  
 
+  floatMagX = (compass.m.x - compassXMin) * inverseXRange - 1.0;
+  floatMagY = (compass.m.y - compassYMin) * inverseYRange - 1.0;
+  floatMagZ = (compass.m.z - compassZMin) * inverseZRange - 1.0;
   //tilt compensate the compass
-  float xMag = (compass.m.x * cos(ToRad(pitch))) + (compass.m.z * sin(ToRad(pitch)));
-  float yMag = -1 * ((compass.m.x * sin(ToRad(roll))  * sin(ToRad(pitch))) + (compass.m.y * cos(ToRad(roll))) - (compass.m.z * sin(ToRad(roll)) * cos(ToRad(pitch))));
-  
+  float xMag = (floatMagX * cos(ToRad(pitch))) + (floatMagZ * sin(ToRad(pitch)));
+  float yMag = -1 * ((floatMagX * sin(ToRad(roll))  * sin(ToRad(pitch))) + (floatMagY * cos(ToRad(roll))) - (floatMagZ * sin(ToRad(roll)) * cos(ToRad(pitch))));
+
   yaw = ToDeg(fastAtan2(yMag,xMag));
 
   if (yaw < 0){
     yaw += 360;
   }  
+  Serial.println(pitch);
+  Serial.println(roll);
+  Serial.println(yaw);
   //calculate the rotation matrix
   float cosPitch = cos(ToRad(pitch));
   float sinPitch = sin(ToRad(pitch));
-  
+
   float cosRoll = cos(ToRad(roll));
   float sinRoll = sin(ToRad(roll));
-  
+
   float cosYaw = cos(ToRad(yaw));
   float sinYaw = sin(ToRad(yaw));
 
@@ -159,67 +217,26 @@ void IMUinit(){
   float r11 = cosPitch * cosYaw;
   float r21 = cosPitch * sinYaw;
   float r31 = -1.0 * sinPitch;
-  
+
   float r12 = -1.0 * (cosRoll * sinYaw) + (sinRoll * sinPitch * cosYaw);
   float r22 = (cosRoll * cosYaw) + (sinRoll * sinPitch * sinYaw);
   float r32 = sinRoll * cosPitch;
-  
+
   float r13 = (sinRoll * sinYaw) + (cosRoll * sinPitch * cosYaw);
   float r23 = -1.0 * (sinRoll * cosYaw) + (cosRoll * sinPitch * sinYaw);
   float r33 = cosRoll * cosPitch;
-  
 
-  
+
+
   //convert to quaternion
   q0 = 0.5 * sqrt(1 + r11 + r22 + r33);
   q1 = (r32 - r23)/(4 * q0);
   q2 = (r13 - r31)/(4 * q0);
   q3 = (r21 - r12)/(4 * q0);
-  //take an average of the gyro readings to remove the bias 
-  gyroSumX = 0;
-  gyroSumY = 0;
-  gyroSumZ = 0;
 
-  for (i = 0; i < 500;i++){
-    gyro.read();
-    gyroSumX += (gyro.g.x);
-    gyroSumY += (gyro.g.y);
-    gyroSumZ += (gyro.g.z);
-    delay(3);
-  }
-  offSetX = gyroSumX / 500.0;
-  offSetY = gyroSumY / 500.0;
-  offSetZ = gyroSumZ / 500.0;
 
 }
-void GYROupdate(float *dt){
-  static float qDot1, qDot2, qDot3, qDot4;
-  static float recipNorm;
-  static float gx;
-  static float gy;
-  static float gz;
 
-  gx = ToRad((gyro.g.x - offSetX) * GYRO_SCALE);
-  gy = ToRad((gyro.g.y - offSetY) * GYRO_SCALE);
-  gz = ToRad((gyro.g.z - offSetZ) * GYRO_SCALE);
-
-  qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
-  qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
-  qDot3 = 0.5f * (q0 * gy - q1 * gz + q3 * gx);
-  qDot4 = 0.5f * (q0 * gz + q1 * gy - q2 * gx);
-  // Integrate rate of change of quaternion to yield quaternion
-  q0 += qDot1 * *dt;
-  q1 += qDot2 * *dt;
-  q2 += qDot3 * *dt;
-  q3 += qDot4 * *dt;
-
-  // Normalise quaternion
-  recipNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
-  q0 *= recipNorm;
-  q1 *= recipNorm;
-  q2 *= recipNorm;
-  q3 *= recipNorm;
-}
 void IMUupdate(float *dt) {
   static float gx;
   static float gy;
@@ -335,9 +352,9 @@ void AHRSupdate(float *dt) {
   ay = -1.0 * compass.a.y;
   az = -1.0 * compass.a.z;
 
-  mx = compass.m.x;
-  my = compass.m.y;
-  mz = compass.m.z;
+  mx = floatMagX;
+  my = floatMagY;
+  mz = floatMagZ;
   // Rate of change of quaternion from gyroscope
   qDot1 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
   qDot2 = 0.5f * (q0 * gx + q2 * gz - q3 * gy);
@@ -480,6 +497,13 @@ float invSqrt(float number) {
   y = y * ( f - ( x * y * y ) );
   return y;
 }
+
+
+
+void Smoothing(float *raw, float *smooth){
+  *smooth = (*raw * (0.15)) + (*smooth * 0.85);
+}
+
 
 
 
