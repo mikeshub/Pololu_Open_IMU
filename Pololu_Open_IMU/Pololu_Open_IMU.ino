@@ -24,9 +24,9 @@ Based on the Madgwick algorithm found at:
  
  to 
  
- compass.writeMagReg(LSM303_CRA_REG_M, 0x1C);
- compass.writeMagReg(LSM303_CRB_REG_M, 0x60);
- compass.writeMagReg(LSM303_MR_REG_M, 0x00);  
+ compass.writeMagReg(LSM303::CRA_REG_M, 0x1C);
+ compass.writeMagReg(LSM303::CRB_REG_M, 0x60);
+ compass.writeMagReg(LSM303::MR_REG_M, 0x00);  
  
  Then put the calibration values below
  
@@ -65,6 +65,7 @@ float gyroSumX,gyroSumY,gyroSumZ;
 float offSetX,offSetY,offSetZ;
 
 float floatMagX,floatMagY,floatMagZ;
+float floatAccX,floatAccY,floatAccZ;
 float smoothAccX,smoothAccY,smoothAccZ;
 float accToFilterX,accToFilterY,accToFilterZ;
 
@@ -92,9 +93,12 @@ void loop(){
     floatMagX = ((float)compass.m.x - compassXMin) * inverseXRange - 1.0;
     floatMagY = ((float)compass.m.y - compassYMin) * inverseYRange - 1.0;
     floatMagZ = ((float)compass.m.z - compassZMin) * inverseZRange - 1.0;
-    Smoothing(&compass.a.x,&smoothAccX);
-    Smoothing(&compass.a.y,&smoothAccY);
-    Smoothing(&compass.a.z,&smoothAccZ);
+    floatAccX = (float) compass.a.x;
+    floatAccY = (float) compass.a.y;
+    floatAccZ = (float) compass.a.z;
+    Smoothing(&floatAccX,&smoothAccX);
+    Smoothing(&floatAccY,&smoothAccY);
+    Smoothing(&floatAccZ,&smoothAccZ);
     accToFilterX = smoothAccX;
     accToFilterY = smoothAccY;
     accToFilterZ = smoothAccZ;
@@ -122,18 +126,18 @@ void IMUinit(){
   compass.init();
   gyro.init();
 
-  gyro.writeReg(L3G_CTRL_REG1, 0xCF);
-  gyro.writeReg(L3G_CTRL_REG2, 0x00);
-  gyro.writeReg(L3G_CTRL_REG3, 0x00);
-  gyro.writeReg(L3G_CTRL_REG4, 0x20); //
-  gyro.writeReg(L3G_CTRL_REG5, 0x02);
+  gyro.writeReg(L3G::CTRL_REG1, 0xCF);
+  gyro.writeReg(L3G::CTRL_REG2, 0x00);
+  gyro.writeReg(L3G::CTRL_REG3, 0x00);
+  gyro.writeReg(L3G::CTRL_REG4, 0x20); //
+  gyro.writeReg(L3G::CTRL_REG5, 0x02);
 
-  compass.writeAccReg(LSM303_CTRL_REG1_A, 0x77);//400hz all enabled
-  compass.writeAccReg(LSM303_CTRL_REG4_A, 0x20);//+/-8g 4mg/LSB
+  compass.writeAccReg(LSM303::CTRL_REG1_A, 0x77);//400hz all enabled
+  compass.writeAccReg(LSM303::CTRL_REG4_A, 0x20);//+/-8g 4mg/LSB
 
-  compass.writeMagReg(LSM303_CRA_REG_M, 0x1C);
-  compass.writeMagReg(LSM303_CRB_REG_M, 0x60);
-  compass.writeMagReg(LSM303_MR_REG_M, 0x00);  
+  compass.writeMagReg(LSM303::CRA_REG_M, 0x1C);
+  compass.writeMagReg(LSM303::CRB_REG_M, 0x60);
+  compass.writeMagReg(LSM303::MR_REG_M, 0x00);  
 
   beta = betaDef;
   //calculate initial quaternion
@@ -142,9 +146,12 @@ void IMUinit(){
   for (i = 0; i < 500;i++){
     gyro.read();
     compass.read();
-    Smoothing(&compass.a.x,&smoothAccX);
-    Smoothing(&compass.a.y,&smoothAccY);
-    Smoothing(&compass.a.z,&smoothAccZ);
+    floatAccX = (float) compass.a.x;
+    floatAccY = (float) compass.a.y;
+    floatAccZ = (float) compass.a.z;
+    Smoothing(&floatAccX,&smoothAccX);
+    Smoothing(&floatAccY,&smoothAccY);
+    Smoothing(&floatAccZ,&smoothAccZ);
     delay(3);
   }
   gyroSumX = 0;
@@ -153,9 +160,12 @@ void IMUinit(){
   for (i = 0; i < 500;i++){
     gyro.read();
     compass.read();
-    Smoothing(&compass.a.x,&smoothAccX);
-    Smoothing(&compass.a.y,&smoothAccY);
-    Smoothing(&compass.a.z,&smoothAccZ);
+    floatAccX = (float) compass.a.x;
+    floatAccY = (float) compass.a.y;
+    floatAccZ = (float) compass.a.z;
+    Smoothing(&floatAccX,&smoothAccX);
+    Smoothing(&floatAccY,&smoothAccY);
+    Smoothing(&floatAccZ,&smoothAccZ);
     gyroSumX += (gyro.g.x);
     gyroSumY += (gyro.g.y);
     gyroSumZ += (gyro.g.z);
@@ -169,18 +179,18 @@ void IMUinit(){
   //calculate the initial quaternion 
   //these are rough values. This calibration works a lot better if the device is kept as flat as possible
   //find the initial pitch and roll
-  pitch = ToDeg(fastAtan2(compass.a.x,sqrt(compass.a.y * compass.a.y + compass.a.z * compass.a.z)));
-  roll = ToDeg(fastAtan2(-1*compass.a.y,sqrt(compass.a.x * compass.a.x + compass.a.z * compass.a.z)));
+  pitch = ToDeg(fastAtan2(floatAccX,sqrt(floatAccY * floatAccY + floatAccZ * floatAccZ)));
+  roll = ToDeg(fastAtan2(-1*floatAccY,sqrt(floatAccX * floatAccX + floatAccZ * floatAccZ)));
 
 
-  if (compass.a.z > 0){
-    if (compass.a.x > 0){
+  if (floatAccZ > 0){
+    if (floatAccX > 0){
       pitch = 180.0 - pitch;
     }
     else{
       pitch = -180.0 - pitch;
     }
-    if (compass.a.y > 0){
+    if (floatAccY > 0){
       roll = -180.0 - roll;
     }
     else{
@@ -503,14 +513,3 @@ float invSqrt(float number) {
 void Smoothing(float *raw, float *smooth){
   *smooth = (*raw * (0.15)) + (*smooth * 0.85);
 }
-
-
-
-
-
-
-
-
-
-
-
