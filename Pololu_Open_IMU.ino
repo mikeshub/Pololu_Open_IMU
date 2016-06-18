@@ -12,13 +12,13 @@ LSM303 LSM303OBJ;
 LSM6 LSM6OBJ;
 LIS3MDL LIS3MDLOBJ;
 
+bool version5 = false;
+
 template <typename T> struct vector
 		{
 		  T x, y, z;
 		};
-/*void (*GetGro)(void);
-void (*GetAcc)(void);
-void (*GetMag)(void);*/
+
 vector<int16_t> *groSensor;
 vector<int16_t> *accSensor;
 vector<int16_t> *magSensor;
@@ -35,6 +35,7 @@ void setup(){
 
 }
 
+
 void InitSensors(){
 	/*
 	 IMU9
@@ -44,7 +45,7 @@ void InitSensors(){
 	v4 L3GD20H LSM303D - alt
 	v5 LSM6DS33 LIS3MDL - alt
 	 */
-	bool version5 = false;
+
 	if (L3GOBJ.init() == false) {
 		if (LSM6OBJ.init() == false) {
 			while (1) {
@@ -60,7 +61,7 @@ void InitSensors(){
 				}
 
 			}
-			bool version5 = true;
+			version5 = true;
 		}
 	}else{
 		if(LSM303OBJ.init() == false){
@@ -74,13 +75,23 @@ void InitSensors(){
 	Serial.println("sensors detected");
 	if (version5 == true){
 		//ver5 reg setup and DT settings etc
+		LSM6OBJ.writeReg(LSM6OBJ.CTRL1_XL,0x48);//104Hz +/- 4g
+		LSM6OBJ.writeReg(LSM6OBJ.CTRL2_G,0x44);//104Hz 500dps
+		LSM6OBJ.writeReg(LSM6OBJ.CTRL2_G,0x04);
+		LSM6OBJ.writeReg(LSM6OBJ.CTRL9_XL,0x38);
+		LSM6OBJ.writeReg(LSM6OBJ.CTRL10_C,0x38);
+		LIS3MDLOBJ.writeReg(LIS3MDLOBJ.CTRL_REG1,0xC2);//155Hz
+		LIS3MDLOBJ.writeReg(LIS3MDLOBJ.CTRL_REG2,0x20);//+/- 8 gauss
+		LIS3MDLOBJ.writeReg(LIS3MDLOBJ.CTRL_REG3,0x00);//+/- 8 gauss
+		LIS3MDLOBJ.writeReg(LIS3MDLOBJ.CTRL_REG4,0x0C);
+		LIS3MDLOBJ.writeReg(LIS3MDLOBJ.CTRL_REG5,0x00);
 		return;
 	}
 	//setup regs according to devic
-	//todo scale factors
+	//todo scale factors xy and z mag need to be the same scale factors
 	L3GOBJ.writeReg(L3GOBJ.CTRL_REG1,0x0F);//100hz
 	L3GOBJ.writeReg(L3GOBJ.CTRL_REG4,0x10);//500dps
-	switch (LSM303OBJ._device){
+	switch ((int)LSM303OBJ.getDeviceType()){
 		case LSM303OBJ.device_DLH:
 		case LSM303OBJ.device_DLM:
 			LSM303OBJ.writeAccReg(LSM303OBJ.CTRL_REG4_A,0x10);
@@ -105,6 +116,7 @@ void InitSensors(){
 			break;
 	}
 
+	Serial.println("config complete");
 }
 
 
