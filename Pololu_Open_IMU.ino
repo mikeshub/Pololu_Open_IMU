@@ -35,7 +35,6 @@ void OutputForCalibration();
 //------
 bool version5 = false;
 
-
 //#define OUTPUT_FOR_CAL
 //#define OUTPUT_MAG_FOR_CAL
 #define OUTPUT_ACC_FOR_CAL
@@ -53,6 +52,32 @@ bool version5 = false;
 //https://sites.google.com/site/sailboatinstruments1/home
 //download and use magneto12.zip
 //user defines
+#define W_INV_00 1
+#define W_INV_01 0
+#define W_INV_02 0
+
+#define W_INV_10 0
+#define W_INV_11 1
+#define W_INV_12 0
+
+#define W_INV_20 0
+#define W_INV_21 0
+#define W_INV_22 1
+
+#define MAG_OFF_X 0
+#define MAG_OFF_Y 0
+#define MAG_OFF_Z 0
+
+#define ACC_OFF_X 0
+#define ACC_OFF_Y 0
+#define ACC_OFF_Z 0
+
+//user acc scale factors
+#define ACC_SCALE_X 0.00120245398773006134969325153374
+#define ACC_SCALE_Y 0.00120245398773006134969325153374
+#define ACC_SCALE_Z 0.00118787878787878787878787878788
+/*
+ *IMU01b
 #define W_INV_00 1.010225
 #define W_INV_01 0.003858
 #define W_INV_02 -0.019080
@@ -76,8 +101,10 @@ bool version5 = false;
 //user acc scale factors
 #define ACC_SCALE_X 0.00120245398773006134969325153374
 #define ACC_SCALE_Y 0.00120245398773006134969325153374
-#define ACC_SCALE_Z 0.00118787878787878787878787878788
-/*#define W_INV_00 1.007206
+#define ACC_SCALE_Z 0.00118787878787878787878787878788*/
+/*
+ * IMU01a
+#define W_INV_00 1.007206
 #define W_INV_01 0.007963
 #define W_INV_02 0.009474
 
@@ -102,7 +129,7 @@ bool version5 = false;
 #define ACC_SCALE_Y 0.0196
 #define ACC_SCALE_Z 0.01884615384615384615384615384615*/
 
-#define USE_USER_CAL
+//#define USE_USER_CAL
 //end user defines
 
 #define X_ 0
