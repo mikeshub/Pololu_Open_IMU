@@ -35,6 +35,7 @@ void OutputForCalibration();
 //------
 bool version5 = false;
 
+
 //#define OUTPUT_FOR_CAL
 //#define OUTPUT_MAG_FOR_CAL
 #define OUTPUT_ACC_FOR_CAL
