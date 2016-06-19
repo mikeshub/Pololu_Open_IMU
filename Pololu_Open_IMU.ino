@@ -4,7 +4,6 @@
 #include <LIS3MDL.h>
 #include <Wire.h>
 
-
 /*todo define / detection for 32 bit
 * switch to Madgwick filter and run 6dof at 400Hz
 * also test online version of Madgwick with integral feedback
@@ -34,10 +33,11 @@ void PollSensors();
 void OutputForCalibration();
 //------
 bool version5 = false;
-
+//uncomment to output data for calibrating the accelerometer or magnetometer
 //#define OUTPUT_FOR_CAL
 //#define OUTPUT_MAG_FOR_CAL
-#define OUTPUT_ACC_FOR_CAL
+//#define OUTPUT_ACC_FOR_CAL
+
 #ifdef OUTPUT_MAG_FOR_CAL
 #ifdef OUTPUT_ACC_FOR_CAL
 #undef OUTPUT_ACC_FOR_CAL
@@ -68,66 +68,15 @@ bool version5 = false;
 #define MAG_OFF_Y 0
 #define MAG_OFF_Z 0
 
+//the offset is 1/2 the difference between the max and the min
 #define ACC_OFF_X 0
 #define ACC_OFF_Y 0
 #define ACC_OFF_Z 0
 
-//user acc scale factors
-#define ACC_SCALE_X 0.00120245398773006134969325153374
-#define ACC_SCALE_Y 0.00120245398773006134969325153374
-#define ACC_SCALE_Z 0.00118787878787878787878787878788
-/*
- *IMU01b
-#define W_INV_00 1.010225
-#define W_INV_01 0.003858
-#define W_INV_02 -0.019080
-
-#define W_INV_10 0.003858
-#define W_INV_11 1.061248
-#define W_INV_12 -0.004000
-
-#define W_INV_20 -0.019080
-#define W_INV_21 -0.004000
-#define W_INV_22 0.885518
-
-#define MAG_OFF_X -0.176768
-#define MAG_OFF_Y -1.051859
-#define MAG_OFF_Z -6.395059
-
-#define ACC_OFF_X -150
-#define ACC_OFF_Y -50
-#define ACC_OFF_Z -550
-
-//user acc scale factors
-#define ACC_SCALE_X 0.00120245398773006134969325153374
-#define ACC_SCALE_Y 0.00120245398773006134969325153374
-#define ACC_SCALE_Z 0.00118787878787878787878787878788*/
-/*
- * IMU01a
-#define W_INV_00 1.007206
-#define W_INV_01 0.007963
-#define W_INV_02 0.009474
-
-#define W_INV_10 0.007963
-#define W_INV_11 1.042308
-#define W_INV_12 0.010689
-
-#define W_INV_20 0.009474
-#define W_INV_21 0.010689
-#define W_INV_22 0.967861
-
-#define MAG_OFF_X -54.130350
-#define MAG_OFF_Y 11.981912
-#define MAG_OFF_Z -41.650412
-
-#define ACC_OFF_X 13
-#define ACC_OFF_Y 0
-#define ACC_OFF_Z -20
-
-//user acc scale factors
-#define ACC_SCALE_X 0.01895551257253384912959381044487
-#define ACC_SCALE_Y 0.0196
-#define ACC_SCALE_Z 0.01884615384615384615384615384615*/
+//the scale factor is the 9.8/(max - offset)
+#define ACC_SCALE_X ACC_SCALE_FACTOR_D_6
+#define ACC_SCALE_Y ACC_SCALE_FACTOR_D_6
+#define ACC_SCALE_Z ACC_SCALE_FACTOR_D_6
 
 //#define USE_USER_CAL
 //end user defines
@@ -179,8 +128,7 @@ uint32_t displayTimer;
 
 void setup() {
 	Serial.begin(115200);
-	Serial.println(
-			"Keeping the device still and level during startup will yield the best results");
+	Serial.println("Keeping the device still and level during startup will yield the best results");
 	Wire.begin();
 	Wire.setClock(400000);
 	//todo include gyro offset cal at startup
@@ -199,7 +147,6 @@ void setup() {
 void loop() {
 
 	currentTime = micros();
-//todo tweak timing
 	if (currentTime - previousTime >= tau) {
 		dt = (currentTime - previousTime) * 0.000001;
 		previousTime = currentTime;
@@ -209,37 +156,14 @@ void loop() {
 	if (millis() - displayTimer > 250) {
 		displayTimer = millis();
 		GetEuler();
-		Serial.print(pitchInDegrees);
-		Serial.print(" , ");
+		Serial.print("!ANG:");
 		Serial.print(rollInDegrees);
-		Serial.print(" , ");
+		Serial.print(",");
+		Serial.print(pitchInDegrees);
+		Serial.print(",");
 		Serial.print(yawInDegrees);
-		Serial.print("\r\n ");
+		Serial.println();
 	}
-	/*PollSensors();
-	 Serial.print(millis());
-	 Serial.print(",");
-	 Serial.print(groScaled[X_]);
-	 Serial.print(",");
-	 Serial.print(groScaled[Z_]);
-	 Serial.print(",");
-	 Serial.print(groScaled[Y_]);
-	 Serial.print(",");
-
-
-	 Serial.print(accScaled[X_]);
-	 Serial.print(",");
-	 Serial.print(accScaled[Y_]);
-	 Serial.print(",");
-	 Serial.print(accScaled[Z_]);
-	 Serial.print(",");;
-	 Serial.print(magScaled[X_]);
-	 Serial.print(",");
-	 Serial.print(magScaled[Y_]);
-	 Serial.print(",");
-	 Serial.print(magScaled[Z_]);
-	 Serial.print("\r\n");
-	 delay(250);*/
 
 }
 
@@ -536,7 +460,7 @@ void InitSensors() {
 		}
 	}
 	Serial.println("sensors detected");
-//setup device registers for ~100Hz operation
+	//setup device registers for ~100Hz operation
 	if (version5 == true) {
 		Serial.print("Device types: ");
 		switch ((int) LSM6OBJ.getDeviceType()) {
